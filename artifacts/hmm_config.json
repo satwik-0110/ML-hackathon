@@ -1,0 +1,7 @@
+{
+  "beta": 5.0,
+  "w_emit": 1.0,
+  "gap_break_s": 120.0,
+  "tuned_on": "OOF predictions, 30 training trips",
+  "objective": "point Top-1 accuracy"
+}

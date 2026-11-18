@@ -1,0 +1,5 @@
+# Laptop 2 (UI only)
+streamlit>=1.35
+streamlit-folium>=0.20
+folium>=0.17
+requests>=2.31

@@ -1,0 +1,10 @@
+student_test 00000000 | Top-1 classifier 0.949 -> HMM 0.964 | route F1 0.995
+student_test 00000007 | Top-1 classifier 0.949 -> HMM 0.949 | route F1 0.987
+student_test 00000009 | Top-1 classifier 0.881 -> HMM 0.917 | route F1 0.966
+student_test 00000040 | Top-1 classifier 0.955 -> HMM 0.977 | route F1 0.990
+student_test 00000052 | Top-1 classifier 0.962 -> HMM 1.000 | route F1 0.998
+student_test 00000056 | Top-1 classifier 0.918 -> HMM 0.955 | route F1 0.932
+student_test 00000065 | Top-1 classifier 0.858 -> HMM 0.880 | route F1 0.986
+student_test 00000076 | Top-1 classifier 0.914 -> HMM 0.963 | route F1 0.972
+student_test 00000077 | Top-1 classifier 0.771 -> HMM 0.850 | route F1 0.958
+student_test 00000091 | Top-1 classifier 0.899 -> HMM 0.946 | route F1 0.987
