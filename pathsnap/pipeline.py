@@ -26,13 +26,35 @@ class PathSnap:
         self.features = bundle.get("features", FEATURES)
         cfg = json.loads((artifact_dir / "hmm_config.json").read_text())
         self.hmm_params = hmm.HMMParams(beta=cfg["beta"], w_emit=cfg["w_emit"])
+        # Optional comparison models (scripts/07_export_models.py). The final model is the default;
+        # the others are loaded from disk the first time they are requested.
+        self.model_dir = artifact_dir / "models"
+        index_file = self.model_dir / "index.json"
+        self.catalog = json.loads(index_file.read_text()) if index_file.exists() else [
+            dict(key="lightgbm", name=self.model_name, family="Boosting", file="../model.joblib", default=True)]
+        self.default_key = next(m["key"] for m in self.catalog if m.get("default"))
+        self._loaded = {self.default_key: self.model}
 
-    def predict_trip(self, track, nodes, arcs):
+    def get_model(self, key=None):
+        """Return (catalog entry, fitted model) for a model key; None means the final model."""
+        key = key or self.default_key
+        entry = next((m for m in self.catalog if m["key"] == key), None)
+        if entry is None:
+            raise KeyError(key)
+        if key not in self._loaded:
+            # keep memory bounded: only the final model and the most recently used comparison model stay loaded
+            for other in [k for k in self._loaded if k != self.default_key]:
+                del self._loaded[other]
+            self._loaded[key] = joblib.load(self.model_dir / entry["file"])
+        return entry, self._loaded[key]
+
+    def predict_trip(self, track, nodes, arcs, model_key=None):
+        entry, model = self.get_model(model_key)
         t0 = time.perf_counter()
         proj, px, py, net = prepare_trip(track, nodes, arcs)
         df = build_features(track, px, py, net)
         t1 = time.perf_counter()
-        prob = self.model.predict_proba(df[self.features].to_numpy(np.float32))[:, 1]
+        prob = model.predict_proba(df[self.features].to_numpy(np.float32))[:, 1]
         t2 = time.perf_counter()
         obs, arc, tproj = df["obs"].to_numpy(), df["arc"].to_numpy(), df["t_proj"].to_numpy()
 
@@ -51,7 +73,7 @@ class PathSnap:
         t3 = time.perf_counter()
 
         return dict(
-            net=net, proj=proj, px=px, py=py,
+            net=net, proj=proj, px=px, py=py, model_key=entry["key"], model_name=entry["name"],
             clf_pred=clf_pred, hmm_pred=hmm_pred, route=route,
             n_obs=len(track), n_candidates=int(len(df)),
             n_obs_without_candidates=int(len(track) - len(np.unique(obs))),

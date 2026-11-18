@@ -29,9 +29,13 @@ Route stitching           shortest paths between matched arcs → continuous arc
 | `scripts/04_bayes_opt.py` | Optuna TPE search on LightGBM, tuned vs untuned comparison, exports `artifacts/model.joblib` |
 | `scripts/05_hmm.py` | Out-of-fold emissions, HMM parameter grid, classifier vs HMM evaluation, exports `artifacts/hmm_config.json` |
 | `scripts/06_maps.py` | Folium maps of predictions on the student-test trips |
+| `scripts/07_export_models.py` | Exports the six comparison models to `artifacts/models/` so the API can run any of them |
 | `api/main.py` | FastAPI backend (Laptop 1) |
-| `ui/app.py` | Streamlit evaluator UI (Laptop 2) |
-| `artifacts/` | Final model and HMM configuration used by the API |
+| `scripts/demo_two_models.py` | Quick demo: trains Logistic Regression and LightGBM and prints their student-test scores (~15 s) |
+| `ui/glass.html` | Evaluator UI (Laptop 2): a static page with a full-window Leaflet map, glass panels, a detail sheet, and light and dark themes |
+| `ui/index.html` | Simpler evaluator UI (same API calls), kept as a fallback |
+| `ui/app.py` | Second fallback UI in Streamlit |
+| `artifacts/` | Final model and HMM configuration used by the API; `artifacts/models/` holds the comparison models |
 | `results/` | CSV results, logs, plots (`results/plots`) and interactive maps (`results/maps`) |
 
 ## Setup
@@ -39,7 +43,7 @@ Route stitching           shortest paths between matched arcs → continuous arc
 ```bash
 python -m venv .venv
 .venv\Scripts\activate            # Windows  (Linux/macOS: source .venv/bin/activate)
-pip install -r requirements.txt   # Laptop 2 only needs: pip install -r requirements-ui.txt
+pip install -r requirements.txt   # Laptop 2 needs no packages for the main UI (see Deployment)
 ```
 
 The raw data is not committed. By default the code expects it in `../data/Student folder/{train,student_test}`.
@@ -54,6 +58,7 @@ python scripts/03_train_models.py   # ~15 min (KNN and RandomForest are the slow
 python scripts/04_bayes_opt.py      # ~15 min (30 Optuna trials x 5 folds)
 python scripts/05_hmm.py            # ~3 min
 python scripts/06_maps.py           # ~1 min
+python scripts/07_export_models.py  # ~1 min  -> artifacts/models/ (needed for the model switch in the UI)
 ```
 
 All random seeds are fixed (`SEED = 42` in `pathsnap/config.py`).
@@ -109,12 +114,34 @@ uvicorn api.main:app --host 0.0.0.0 --port 8000
 **Laptop 2: UI**
 
 ```bash
+python -m http.server 8501 --directory ui
+```
+
+Then open `http://localhost:8501/glass.html?api=http://<laptop-1-ip>:8000` in a browser. The page needs only
+Python's built-in web server (no packages) and an internet connection for the map tiles. The simpler page is
+at `http://localhost:8501/?api=http://<laptop-1-ip>:8000`.
+
+The UI lists the trips served by `GET /trips`. Clicking a trip sends its id to `POST /predict`. The page then
+draws the predicted route on a map and shows the metrics computed by the API, plus a log of the requests it sent.
+In `glass.html`:
+
+- The camera flies to the trip while the API works, then the route draws itself with a dot driving along it.
+  The play button replays it.
+- The model button at the top right switches the classifier. "Run every model on this trip" fills in each
+  model's accuracy on the selected trip, classifier only and with HMM.
+- The switcher next to it shows the HMM route, the classifier-only arcs from before decoding, or both.
+- The Details button opens the full metrics.
+
+The HMM settings were tuned with LightGBM and are reused unchanged for the other models. To keep memory low,
+the API keeps only the final model and the most recently used comparison model loaded.
+
+Fallback UI (Streamlit), if the static page cannot be used:
+
+```bash
+pip install -r requirements-ui.txt
 set PATHSNAP_API_URL=http://<laptop-1-ip>:8000
 streamlit run ui/app.py
 ```
-
-The UI lists the trips served by `GET /trips` and sends the selected id to `POST /predict`. It then shows
-the predicted route on a map together with the metrics computed by the API.
 
 ### API
 
@@ -122,7 +149,8 @@ the predicted route on a map together with the metrics computed by the API.
 |---|---|
 | `GET /health` | Status, loaded model, number of evaluation trips |
 | `GET /trips` | Trip ids with number of points, duration and centre (no reference data) |
-| `POST /predict` `{"trip_id": "..."}` | Runs the full pipeline. Returns the predicted route polyline and arc ids, the GPS points, classifier-only arcs, metrics, diagnostics and timings |
+| `GET /models` | The models the API can run: the final tuned LightGBM (default) and the six comparison models |
+| `POST /predict` `{"trip_id": "...", "model": "..."}` | Runs the full pipeline. `model` is optional and takes a key from `GET /models`; without it the final model is used. Returns the predicted route polyline and arc ids, the GPS points, classifier-only arcs, metrics, diagnostics and timings |
 
 ## Leakage and integrity safeguards
 

@@ -1,0 +1,212 @@
+PATHSNAP - TERMINAL COMMANDS
+============================================================================
+
+Open a terminal in VS Code (Terminal > New Terminal) and go to the project:
+
+    cd C:\ML-hackathon\pathsnap
+
+Every command below is run from that folder. They work in PowerShell and in cmd.
+Times were measured on this laptop and are approximate.
+
+
+----------------------------------------------------------------------------
+1. PREPARE THE DATASET
+----------------------------------------------------------------------------
+
+Explore the raw data (statistics, plots, Folium maps)              ~2 min
+    .venv\Scripts\python.exe scripts\01_eda.py
+
+Build the training table (labels, candidate roads, 18 features)    ~1.5 min
+    .venv\Scripts\python.exe scripts\02_build_dataset.py
+
+Step 2 below needs this table, so run 02_build_dataset.py first.
+
+
+----------------------------------------------------------------------------
+2. TRAIN AND TEST ONE MODEL
+----------------------------------------------------------------------------
+
+Each command trains the model on the 78 training trips, tests it on the
+10 student-test trips, and prints Top-1 accuracy, macro-F1, precision,
+recall, log loss and route continuity.
+
+"Top-1" in the right-hand column is the student-test Top-1 accuracy the
+command prints (share of GPS points placed on the correct road segment).
+
+  Logistic Regression                                    ~15 s    Top-1 0.8582
+    .venv\Scripts\python.exe scripts\run_model.py logreg
+
+  Gaussian Naive Bayes                                   ~15 s    Top-1 0.8176
+    .venv\Scripts\python.exe scripts\run_model.py gnb
+
+  K-Nearest Neighbours                                   ~2 min   Top-1 0.8652
+    .venv\Scripts\python.exe scripts\run_model.py knn
+
+  Random Forest                                          ~1.5 min Top-1 0.8858
+    .venv\Scripts\python.exe scripts\run_model.py random_forest
+
+  Extra Trees                                            ~1 min   Top-1 0.8722
+    .venv\Scripts\python.exe scripts\run_model.py extra_trees
+
+  LightGBM (default settings)                            ~25 s    Top-1 0.8958
+    .venv\Scripts\python.exe scripts\run_model.py lightgbm
+
+  MLP neural network                                     ~1.5 min Top-1 0.8831
+    .venv\Scripts\python.exe scripts\run_model.py mlp
+
+  LightGBM with the Bayesian-optimised settings (FINAL MODEL)
+                                                         ~30 s    Top-1 0.8951
+    .venv\Scripts\python.exe scripts\run_model.py lightgbm_tuned
+
+Two options can be added to any of the commands above:
+
+  --hmm   also decode the student-test trips with HMM/Viterbi using this
+          model's probabilities, and print the Top-1 accuracy after it
+          (adds about 20 s)
+
+  --cv    also run 5-fold cross-validation grouped by trip on the training
+          trips (5 extra trainings, so it is slow for Random Forest, MLP
+          and KNN)
+
+Examples:
+
+  Final model with cross-validation and HMM                        ~2 min
+    .venv\Scripts\python.exe scripts\run_model.py lightgbm_tuned --cv --hmm
+    prints: cross-validation Top-1 0.8916, student-test Top-1 0.8951,
+            Top-1 with HMM 0.9334
+
+  Logistic Regression with HMM                                     ~30 s
+    .venv\Scripts\python.exe scripts\run_model.py logreg --hmm
+    prints: student-test Top-1 0.8582, Top-1 with HMM 0.9044
+
+Quick side-by-side of Logistic Regression and LightGBM               ~20 s
+    .venv\Scripts\python.exe scripts\demo_two_models.py
+
+
+----------------------------------------------------------------------------
+3. RUN A MODEL ON THE EVALUATION TEST SET (FULL PIPELINE)
+----------------------------------------------------------------------------
+
+These commands do not train anything. They load a saved model and run the
+complete pipeline on every trip in the folder:
+
+    candidates -> features -> classifier -> HMM/Viterbi -> route
+
+They print, per trip: Top-1 accuracy of the classifier alone, Top-1 after
+the HMM, route F1, route continuity and the time taken. This is the same
+code the API runs for one trip.
+
+The evaluation test set is in:   ..\data\evaluator\evaluator_test
+
+  FINAL MODEL: LightGBM (tuned) + HMM                              ~25 s
+    .venv\Scripts\python.exe scripts\evaluate_trips.py --dir ..\data\evaluator\evaluator_test
+    prints for all 10 trips together: classifier 0.859, with HMM 0.941,
+    route F1 0.970, continuity 0.79 -> 1.00
+
+  Random Forest
+    .venv\Scripts\python.exe scripts\evaluate_trips.py --dir ..\data\evaluator\evaluator_test --model random_forest
+
+  Extra Trees
+    .venv\Scripts\python.exe scripts\evaluate_trips.py --dir ..\data\evaluator\evaluator_test --model extra_trees
+
+  MLP neural network
+    .venv\Scripts\python.exe scripts\evaluate_trips.py --dir ..\data\evaluator\evaluator_test --model mlp
+
+  K-Nearest Neighbours (slow: several minutes)
+    .venv\Scripts\python.exe scripts\evaluate_trips.py --dir ..\data\evaluator\evaluator_test --model knn
+
+  Logistic Regression                                              ~20 s
+    .venv\Scripts\python.exe scripts\evaluate_trips.py --dir ..\data\evaluator\evaluator_test --model logreg
+    prints for all 10 trips together: classifier 0.841, with HMM 0.935
+
+  Gaussian Naive Bayes                                             ~20 s
+    .venv\Scripts\python.exe scripts\evaluate_trips.py --dir ..\data\evaluator\evaluator_test --model gnb
+    prints for all 10 trips together: classifier 0.828, with HMM 0.919
+
+Add --save to write the table to results\ as a CSV file.
+
+The same command on the 10 student-test trips (leave out --dir):
+    .venv\Scripts\python.exe scripts\evaluate_trips.py
+    .venv\Scripts\python.exe scripts\evaluate_trips.py --model random_forest
+
+Note: the evaluation test set was used only to run these final checks. No
+model, hyperparameter or HMM setting was chosen or changed using it. The
+final model was selected on cross-validation over the training trips.
+
+
+----------------------------------------------------------------------------
+4. THE FULL EXPERIMENTS (ALL MODELS TOGETHER)
+----------------------------------------------------------------------------
+
+All 7 models with 5-fold cross-validation, comparison table,
+confusion matrices and learning curves                             ~15 min
+    .venv\Scripts\python.exe scripts\03_train_models.py
+
+Bayesian hyperparameter optimisation of LightGBM (30 trials)       ~15 min
+    .venv\Scripts\python.exe scripts\04_bayes_opt.py
+
+HMM tuning, and classifier-only vs classifier + HMM comparison     ~3 min
+    .venv\Scripts\python.exe scripts\05_hmm.py
+
+Folium maps of the predictions on the student-test trips           ~1 min
+    .venv\Scripts\python.exe scripts\06_maps.py
+
+Export the comparison models so the API can run any of them        ~1 min
+    .venv\Scripts\python.exe scripts\07_export_models.py
+
+Results are written to the results\ folder:
+    results\model_comparison.csv      the 7-model comparison
+    results\tuning_comparison.csv     tuned vs untuned LightGBM
+    results\optuna_trials.csv         every optimisation trial
+    results\hmm_student_test.csv      classifier vs HMM, per trip
+    results\plots\                    all graphs
+    results\maps\                     interactive maps (open in a browser)
+
+
+----------------------------------------------------------------------------
+5. START THE API AND THE UI
+----------------------------------------------------------------------------
+
+LAPTOP 1 - API. Tell it which trips to serve, then start it.
+
+  In PowerShell:
+    $env:PATHSNAP_EVAL_DIR = "C:\ML-hackathon\data\evaluator\evaluator_test"
+    .venv\Scripts\python.exe -m uvicorn api.main:app --host 0.0.0.0 --port 8000
+
+  In cmd:
+    set PATHSNAP_EVAL_DIR=C:\ML-hackathon\data\evaluator\evaluator_test
+    .venv\Scripts\python.exe -m uvicorn api.main:app --host 0.0.0.0 --port 8000
+
+  Keep this window visible: every request is logged here with the trip,
+  the model, the time per stage and the scores.
+
+  Find this laptop's IP address:
+    ipconfig
+
+  Allow the port through the firewall (once, in an administrator terminal):
+    netsh advfirewall firewall add rule name="PathSnap" dir=in action=allow protocol=TCP localport=8000
+
+LAPTOP 2 - UI. Needs only Python, no packages.
+
+    python -m http.server 8501 --directory ui
+
+  Then open in a browser (replace <laptop-1-ip>):
+    http://localhost:8501/glass.html?api=http://<laptop-1-ip>:8000
+
+  Both on one laptop, for testing:
+    http://localhost:8501/glass.html?api=http://localhost:8000
+
+Check the API from the terminal:
+
+  In PowerShell (note curl.exe, not curl):
+    curl.exe http://localhost:8000/health
+    curl.exe http://localhost:8000/trips
+    curl.exe http://localhost:8000/models
+
+  Run one trip with the final model:
+    curl.exe -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d '{\"trip_id\":\"00000049\"}'
+
+  Run one trip with another model:
+    curl.exe -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d '{\"trip_id\":\"00000049\",\"model\":\"random_forest\"}'
+
+  Model keys: lightgbm  random_forest  mlp  extra_trees  knn  logreg  gnb

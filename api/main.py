@@ -14,6 +14,7 @@ import os
 import sys
 import time
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 from fastapi import FastAPI, HTTPException, Request
@@ -45,6 +46,7 @@ def available_trips():
 
 class PredictRequest(BaseModel):
     trip_id: str
+    model: Optional[str] = None   # model key from GET /models; omitted = the final tuned model
 
 
 @app.middleware("http")
@@ -61,6 +63,12 @@ def health():
     return {"status": "ok", "model": model.model_name, "eval_dir": str(EVAL_DIR), "n_trips": len(available_trips())}
 
 
+@app.get("/models")
+def models():
+    """Models the API can run. The default is the final tuned model; the others are the comparison models."""
+    return {"models": [{k: m.get(k) for k in ("key", "name", "family", "student_test_top1", "default")} for m in model.catalog]}
+
+
 @app.get("/trips")
 def trips():
     out = []
@@ -75,11 +83,14 @@ def trips():
 def predict(req: PredictRequest):
     if req.trip_id not in available_trips():
         raise HTTPException(404, f"unknown trip id {req.trip_id!r}")
+    if req.model is not None and req.model not in {m["key"] for m in model.catalog}:
+        raise HTTPException(404, f"unknown model {req.model!r}")
     folder = EVAL_DIR / req.trip_id
-    log.info("[%s] request received - loading GPS track and road network", req.trip_id)
+    log.info("[%s] request received (model=%s) - loading GPS track and road network", req.trip_id,
+             req.model or model.default_key)
     trip = load_trip(folder, with_route=False)           # prediction never sees the reference route
     log.info("[%s] %d GPS points, %d nodes, %d arcs", req.trip_id, len(trip.track), len(trip.nodes), len(trip.arcs))
-    res = model.predict_trip(trip.track, trip.nodes, trip.arcs)
+    res = model.predict_trip(trip.track, trip.nodes, trip.arcs, model_key=req.model)
     t = res["timing"]
     log.info("[%s] %d candidates | features %.2fs, classifier %.2fs, HMM+stitch %.2fs | %d breaks",
              req.trip_id, res["n_candidates"], t["features_s"], t["classifier_s"], t["hmm_s"], res["hmm_breaks"])
@@ -102,7 +113,8 @@ def predict(req: PredictRequest):
     lon_b, lat_b = net.proj.to_lonlat(net.bx[clf_arcs], net.by[clf_arcs])
     return {
         "trip_id": req.trip_id,
-        "model": model.model_name,
+        "model": res["model_name"],
+        "model_key": res["model_key"],
         "hmm_params": {"beta": model.hmm_params.beta, "w_emit": model.hmm_params.w_emit},
         "n_points": int(len(track)),
         "gps": np.c_[track[::step, 1], track[::step, 0]].round(7).tolist(),

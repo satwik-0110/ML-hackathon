@@ -1,0 +1,58 @@
+[
+  {
+    "key": "lightgbm",
+    "name": "LightGBM (tuned)",
+    "family": "Boosting",
+    "file": "../model.joblib",
+    "student_test_top1": 0.8951,
+    "default": true
+  },
+  {
+    "key": "random_forest",
+    "name": "Random Forest",
+    "family": "Ensemble (bagging)",
+    "file": "random_forest.joblib",
+    "student_test_top1": 0.8858,
+    "default": false
+  },
+  {
+    "key": "mlp",
+    "name": "MLP neural network",
+    "family": "Neural network",
+    "file": "mlp.joblib",
+    "student_test_top1": 0.8831,
+    "default": false
+  },
+  {
+    "key": "extra_trees",
+    "name": "Extra Trees",
+    "family": "Ensemble (randomised trees)",
+    "file": "extra_trees.joblib",
+    "student_test_top1": 0.8722,
+    "default": false
+  },
+  {
+    "key": "knn",
+    "name": "K-Nearest Neighbours",
+    "family": "Instance-based",
+    "file": "knn.joblib",
+    "student_test_top1": 0.8652,
+    "default": false
+  },
+  {
+    "key": "logreg",
+    "name": "Logistic Regression",
+    "family": "Linear",
+    "file": "logreg.joblib",
+    "student_test_top1": 0.8582,
+    "default": false
+  },
+  {
+    "key": "gnb",
+    "name": "Gaussian Naive Bayes",
+    "family": "Probabilistic",
+    "file": "gnb.joblib",
+    "student_test_top1": 0.8176,
+    "default": false
+  }
+]
